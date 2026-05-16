@@ -20,7 +20,7 @@
 
 // Node.js: load Temporal polyfill (browser loads via CDN script before this file)
 if (typeof Temporal === 'undefined') {
-    try { var { Temporal } = require('temporal-polyfill'); } catch(e) {}
+    try { var { Temporal } = require('temporal-polyfill'); } catch (e) { }
 }
 
 class IndonesianDateParser {
@@ -233,7 +233,6 @@ class IndonesianDateParser {
             'jmt': 'jumat',
             'jmat': 'jumat',
             'sbtu': 'sabtu',
-            'mggu': 'minggu',
 
             // Conjunctions
             'smp': 'sampai',
@@ -330,7 +329,6 @@ class IndonesianDateParser {
             'dlpn': 'delapan',
             'smbln': 'sembilan',
             'sbln': 'sembilan',
-            'spuluh': 'sepuluh',
             'spuluh': 'sepuluh',
             'sbls': 'sebelas',
             'dua bls': 'dua belas',
