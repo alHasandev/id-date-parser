@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indonesian Date Parser - Demo dengan Typo Correction</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      color: #1a1a1a;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 2rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #6366f1;
+      color: white;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+
+    .input-section {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+
+    .input-group {
+      position: relative;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #444;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      font-size: 1rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #6366f1;
+    }
+
+    .result-box {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      min-height: 60px;
+    }
+
+    .result-box.empty {
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .result-value {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 1.125rem;
+      color: #6366f1;
+      font-weight: 600;
+    }
+
+    .result-kind {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-left: 0.5rem;
+    }
+
+    .kind-anchor { background: #dbeafe; color: #1e40af; }
+    .kind-relative { background: #dcfce7; color: #166534; }
+    .kind-weekday { background: #fef3c7; color: #92400e; }
+    .kind-period { background: #fce7f3; color: #9d174d; }
+    .kind-boundary { background: #e0e7ff; color: #3730a3; }
+    .kind-holiday { background: #fee2e2; color: #991b1b; }
+    .kind-absolute { background: #f3e8ff; color: #6b21a8; }
+    .kind-range { background: #ccfbf1; color: #115e59; }
+    .kind-error { background: #fee2e2; color: #991b1b; }
+
+    .result-display {
+      margin-top: 0.5rem;
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+
+    .corrections-bar {
+      margin-top: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: #fefce8;
+      border: 1px solid #fde047;
+      border-radius: 6px;
+      font-size: 0.8125rem;
+    }
+
+    .corrections-bar .title {
+      font-weight: 600;
+      color: #854d0e;
+      margin-bottom: 0.25rem;
+    }
+
+    .correction-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.125rem 0.375rem;
+      background: white;
+      border: 1px solid #facc15;
+      border-radius: 4px;
+      margin: 0.125rem;
+      font-size: 0.75rem;
+    }
+
+    .correction-chip .arrow {
+      color: #eab308;
+    }
+
+    .correction-chip .method {
+      font-size: 0.625rem;
+      color: #a16207;
+      margin-left: 0.25rem;
+      text-transform: uppercase;
+    }
+
+    .examples-section {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+
+    .examples-section h2 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+      color: #1a1a1a;
+    }
+
+    .example-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .example-card {
+      padding: 0.75rem 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fafafa;
+    }
+
+    .example-card:hover {
+      border-color: #6366f1;
+      background: #f5f3ff;
+      transform: translateY(-1px);
+    }
+
+    .example-phrase {
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .example-result {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+      font-family: monospace;
+    }
+
+    .example-correction {
+      font-size: 0.75rem;
+      color: #a16207;
+      margin-top: 0.25rem;
+      background: #fefce8;
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #9ca3af;
+      margin: 1.5rem 0 0.75rem;
+      font-weight: 600;
+    }
+
+    .config-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .config-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .config-item label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin: 0;
+    }
+
+    .config-item input,
+    .config-item select {
+      padding: 0.375rem 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 0.875rem;
+    }
+
+    .error-message {
+      color: #dc2626;
+      font-size: 0.875rem;
+      margin-top: 0.5rem;
+    }
+
+    .range-arrow {
+      color: #9ca3af;
+      margin: 0 0.5rem;
+    }
+
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.875rem;
+      color: #1e40af;
+    }
+
+    .info-box strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    @media (max-width: 640px) {
+      .example-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+<base target="_blank">
+</head>
+<body>
+  <div class="container">
+    <h1>🇮🇩 Indonesian Date Parser <span class="badge">v2.0 + Fuzzy</span></h1>
+    <p class="subtitle">Parser tanggal natural language untuk bahasa Indonesia dengan <strong>typo correction otomatis</strong>. Ketik dengan typo pun tetap dipahami!</p>
+
+    <div class="info-box">
+      <strong>💡 Fitur Typo Correction (3 Layer):</strong>
+      <ol style="margin-left: 1.25rem; margin-top: 0.25rem">
+        <li><b>Abbreviation map</b> — tgl→tanggal, bsk→besok, kmrn→kemarin, dlm→dalam, sblm→sebelum</li>
+        <li><b>Phrase exact match</b> — "mggu depn" dicocokkan dengan frase lengkap di kamus</li>
+        <li><b>Token-level fuzzy matching</b> — Levenshtein distance per kata (threshold: 1-3 typo tergantung panjang kata)</li>
+      </ol>
+    </div>
+
+    <div class="input-section">
+      <div class="config-bar">
+        <div class="config-item">
+          <label for="refDate">Tanggal Referensi:</label>
+          <input type="date" id="refDate" value="2026-05-16">
+        </div>
+        <div class="config-item">
+          <label for="weekStart">Awal Minggu:</label>
+          <select id="weekStart">
+            <option value="monday">Senin</option>
+            <option value="sunday">Minggu</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="dateInput">Coba ketik ekspresi tanggal (boleh typo!):</label>
+        <input 
+          type="text" 
+          id="dateInput" 
+          placeholder='Contoh: "bsk", "mggu depn", "3 hr sblm Natal", "kmrn lusa"'
+          autocomplete="off"
+        >
+      </div>
+
+      <div id="resultBox" class="result-box empty">
+        Hasil akan muncul di sini...
+      </div>
+    </div>
+
+    <div class="examples-section">
+      <h2>🔤 Contoh dengan Typo / Singkatan</h2>
+      <p class="section-title">Singkatan Umum (Abbreviation)</p>
+      <div class="example-grid" id="examples-abbr"></div>
+
+      <p class="section-title">Typo Ringan (Fuzzy Match)</p>
+      <div class="example-grid" id="examples-typo"></div>
+
+      <p class="section-title">Kombinasi Typo + Singkatan</p>
+      <div class="example-grid" id="examples-combo"></div>
+    </div>
+
+    <div class="examples-section">
+      <h2>📚 Contoh Ekspresi Standar</h2>
+      <p class="section-title">Anchor (Titik Acuan)</p>
+      <div class="example-grid" id="examples-anchor"></div>
+
+      <p class="section-title">Relatif (Masa Depan)</p>
+      <div class="example-grid" id="examples-future"></div>
+
+      <p class="section-title">Relatif (Masa Lalu)</p>
+      <div class="example-grid" id="examples-past"></div>
+
+      <p class="section-title">Hari dalam Minggu</p>
+      <div class="example-grid" id="examples-weekday"></div>
+
+      <p class="section-title">Periode</p>
+      <div class="example-grid" id="examples-period"></div>
+
+      <p class="section-title">Batas Waktu</p>
+      <div class="example-grid" id="examples-boundary"></div>
+
+      <p class="section-title">Hari Libur</p>
+      <div class="example-grid" id="examples-holiday"></div>
+
+      <p class="section-title">Format Tanggal</p>
+      <div class="example-grid" id="examples-absolute"></div>
+
+      <p class="section-title">Rentang (Range)</p>
+      <div class="example-grid" id="examples-range"></div>
+
+      <p class="section-title">Aritmatika Liburan</p>
+      <div class="example-grid" id="examples-arithmetic"></div>
+    </div>
+  </div>
+
+  <script src="parser-indonesia.js"></script>
+  <script>
+    const input = document.getElementById('dateInput');
+    const resultBox = document.getElementById('resultBox');
+    const refDateInput = document.getElementById('refDate');
+    const weekStartSelect = document.getElementById('weekStart');
+
+    let parser = new IndonesianDateParser({
+      referenceDate: new Date(refDateInput.value),
+      weekStart: weekStartSelect.value
+    });
+
+    let initDone = false;
+
+    async function loadHolidayData() {
+      resultBox.className = 'result-box';
+      resultBox.innerHTML = '<div style="display:flex;align-items:center;gap:0.75rem;color:#6366f1"><span style="display:inline-block;width:20px;height:20px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:spin 0.6s linear infinite"></span> Memuat data hari libur dari API...</div>';
+      try {
+        await parser.init();
+      } catch (e) {
+        console.warn('Failed to fetch Islamic holidays from API, using local computation:', e.message);
+      }
+      initDone = true;
+      resultBox.className = 'result-box empty';
+      resultBox.innerHTML = 'Hasil akan muncul di sini...';
+      renderExamples();
+    }
+
+    function updateParser() {
+      parser = new IndonesianDateParser({
+        referenceDate: new Date(refDateInput.value),
+        weekStart: weekStartSelect.value
+      });
+      initDone = false;
+      if (input.value.trim()) {
+        handleInput();
+      }
+      loadHolidayData();
+    }
+
+    refDateInput.addEventListener('change', updateParser);
+    weekStartSelect.addEventListener('change', updateParser);
+
+    function handleInput() {
+      const value = input.value.trim();
+      if (!value) {
+        resultBox.className = 'result-box empty';
+        resultBox.innerHTML = 'Hasil akan muncul di sini...';
+        return;
+      }
+
+      const result = parser.parse(value);
+      renderResult(result);
+    }
+
+    function renderResult(result) {
+      if (result.type === 'error') {
+        resultBox.className = 'result-box';
+        let html = `
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="result-kind kind-error">Error</span>
+            <span class="error-message">${result.message}</span>
+          </div>
+        `;
+        if (result.corrected && result.corrected !== result.input) {
+          html += `<div style="margin-top:0.5rem;color:#6b7280;font-size:0.875rem">Dicoba koreksi ke: "${result.corrected}"</div>`;
+        }
+        if (result.suggestions && result.suggestions.length > 0) {
+          html += `<div style="margin-top:0.75rem;font-size:0.875rem;color:#6b7280">Mungkin maksud Anda:</div>`;
+          html += `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.35rem">`;
+          for (const s of result.suggestions) {
+            html += `<span class="suggestion-chip" onclick="tryPhrase('${s.replace(/'/g, "\\'")}')" style="cursor:pointer;padding:0.25rem 0.6rem;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:4px;font-size:0.8rem">${s}</span>`;
+          }
+          html += `</div>`;
+        }
+        resultBox.innerHTML = html;
+        return;
+      }
+
+      let html = '';
+
+      // Show corrections if any
+      if (result.corrections && result.corrections.length > 0) {
+        const chips = result.corrections.map(c => {
+          const methodLabel = c.method === 'abbr' ? 'abbr' : `fuzzy~${c.distance}`;
+          return `<span class="correction-chip">${c.from} <span class="arrow">→</span> ${c.to}<span class="method">${methodLabel}</span></span>`;
+        }).join('');
+        html += `
+          <div class="corrections-bar">
+            <div class="title">📝 Typo Correction:</div>
+            ${chips}
+          </div>
+        `;
+      }
+
+      if (result.type === 'ambiguous') {
+        html += `<div style="font-weight:600;color:#6b7280;margin-top:0.75rem">🔀 ${result.results.length} kemungkinan:</div>`;
+        html += `<div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem">`;
+        for (const r of result.results) {
+          const kindClass = `kind-${r.kind}`;
+          if (r.type === 'range') {
+            const startDisplay = parser.formatDisplay(r.start.date);
+            const endDisplay = parser.formatDisplay(r.end.date);
+            html += `
+              <div style="padding:0.6rem 0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                  <span class="result-value">${r.start.value}</span>
+                  <span class="range-arrow">→</span>
+                  <span class="result-value">${r.end.value}</span>
+                  <span class="result-kind ${kindClass}">${r.kind}</span>
+                  ${r.label ? `<span style="font-size:0.75rem;color:#6b7280;font-style:italic">${r.label}</span>` : ''}
+                </div>
+                <div class="result-display">${startDisplay} <span style="color:#9ca3af">sampai</span> ${endDisplay}</div>
+              </div>
+            `;
+          } else {
+            const display = parser.formatDisplay(r.date);
+            html += `
+              <div style="padding:0.6rem 0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                  <span class="result-value">${r.value}</span>
+                  <span class="result-kind ${kindClass}">${r.kind}</span>
+                  ${r.label ? `<span style="font-size:0.75rem;color:#6b7280;font-style:italic">${r.label}</span>` : ''}
+                </div>
+                <div class="result-display">${display}</div>
+              </div>
+            `;
+          }
+        }
+        html += `</div>`;
+      } else if (result.type === 'range-ambiguous') {
+        html += `<div style="font-weight:600;color:#6b7280;margin-top:0.75rem">⚠️ Urutan terbalik — ${result.results.length} kemungkinan:</div>`;
+        html += `<div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem">`;
+        for (const r of result.results) {
+          const startDisplay = parser.formatDisplay(r.start.date);
+          const endDisplay = parser.formatDisplay(r.end.date);
+          html += `
+            <div style="padding:0.6rem 0.75rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
+              <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                <span class="result-value">${r.start.value}</span>
+                <span class="range-arrow">→</span>
+                <span class="result-value">${r.end.value}</span>
+                <span class="result-kind kind-range">range</span>
+                ${r.label ? `<span style="font-size:0.75rem;color:#6b7280;font-style:italic">${r.label}</span>` : ''}
+              </div>
+              <div class="result-display">
+                ${startDisplay} <span style="color:#9ca3af">sampai</span> ${endDisplay}
+              </div>
+            </div>
+          `;
+        }
+        html += `</div>`;
+      } else if (result.type === 'range') {
+        const startDisplay = parser.formatDisplay(result.start.date);
+        const endDisplay = parser.formatDisplay(result.end.date);
+
+        html += `
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem">
+            <span class="result-value">${result.start.value}</span>
+            <span class="range-arrow">→</span>
+            <span class="result-value">${result.end.value}</span>
+            <span class="result-kind kind-range">${result.kind}</span>
+          </div>
+          <div class="result-display">
+            ${startDisplay} <span style="color:#9ca3af">sampai</span> ${endDisplay}
+          </div>
+        `;
+      } else {
+        const display = parser.formatDisplay(result.date);
+        const kindClass = `kind-${result.kind}`;
+
+        html += `
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem">
+            <span class="result-value">${result.value}</span>
+            <span class="result-kind ${kindClass}">${result.kind}</span>
+          </div>
+          <div class="result-display">${display}</div>
+        `;
+      }
+
+      resultBox.className = 'result-box';
+      resultBox.innerHTML = html;
+    }
+
+    input.addEventListener('input', handleInput);
+
+    // Example definitions
+    const examples = {
+      abbr: [
+        'bsk',
+        'kmrn',
+        'hr ini',
+        'dlm 3 hr',
+        'tgl 14 Maret',
+        'bln depan',
+        'thn lalu',
+        'mggu depan',
+        'sblm Natal',
+        'stlh Idul Fitri'
+      ],
+      typo: [
+        'besk',
+        'kemaren',
+        'senin dpan',
+        'minggu dpann',
+        'awal bln',
+        'akhir mnggu',
+        'dalm 5 hari',
+        '3 hari yg lalu',
+        'hari kamiss',
+        'bulan dpan'
+      ],
+      combo: [
+        'bsk smp lusa',
+        '3 hr sblm Natal',
+        'mgg depn - mgg llu',
+        'dlm 2 bln lg',
+        'tgl 17 agst',
+        'kmrn lusa dr skrg',
+        'awl thn dpann',
+        'akhr mnggu ini'
+      ],
+      anchor: [
+        'hari ini',
+        'besok',
+        'lusa',
+        'kemarin',
+        'kemarin lusa'
+      ],
+      future: [
+        'dalam 3 hari',
+        'dalam 2 minggu',
+        '1 bulan lagi',
+        'dalam setahun',
+        '3 pekan mendatang'
+      ],
+      past: [
+        '3 hari lalu',
+        '2 minggu yang lalu',
+        '1 bulan lalu',
+        'setahun yang lalu'
+      ],
+      weekday: [
+        'Senin depan',
+        'hari Selasa',
+        'Jumat lalu',
+        'Sabtu minggu depan',
+        'Minggu ini'
+      ],
+      period: [
+        'minggu ini',
+        'minggu depan',
+        'bulan lalu',
+        'tahun depan',
+        'akhir pekan'
+      ],
+      boundary: [
+        'awal bulan',
+        'akhir bulan',
+        'awal minggu',
+        'akhir tahun'
+      ],
+      holiday: [
+        'Natal',
+        'Idul Fitri',
+        'Tahun Baru',
+        'Waisak',
+        'Hari Kemerdekaan'
+      ],
+      absolute: [
+        '14 Maret 2026',
+        '14/03/2026',
+        '2026-03-14',
+        'tgl 17 Agustus',
+        'Maret 14 2026'
+      ],
+      range: [
+        'dari besok sampai lusa',
+        '14 Maret sampai 28 Maret',
+        'minggu ini - minggu depan',
+        'Senin sampai Jumat'
+      ],
+      arithmetic: [
+        '3 hari sebelum Natal',
+        '2 minggu setelah Idul Fitri',
+        '1 hari sebelum Tahun Baru',
+        '7 hari sesudah Waisak',
+        'sebelum Natal',
+        'setelah Idul Fitri',
+        'sesudah Waisak'
+      ]
+    };
+
+    function renderExamples() {
+      for (const [category, phrases] of Object.entries(examples)) {
+        const container = document.getElementById(`examples-${category}`);
+        if (!container) continue;
+
+        container.innerHTML = phrases.map(phrase => {
+          const result = parser.parse(phrase);
+          let resultText = '';
+          let correctionText = '';
+
+          if (result.type === 'error') {
+            resultText = '❌ ' + result.message;
+          } else if (result.type === 'ambiguous') {
+            resultText = result.results.map(r => {
+              if (r.type === 'range') return `${r.start.value}→${r.end.value}`;
+              return r.value;
+            }).join(' | ');
+          } else if (result.type === 'range-ambiguous') {
+            resultText = result.results.map(r => `${r.start.value}→${r.end.value}`).join(', ');
+          } else if (result.type === 'range') {
+            resultText = `${result.start.value} → ${result.end.value}`;
+          } else {
+            resultText = result.value;
+          }
+
+          if (result.corrections && result.corrections.length > 0) {
+            const corrs = result.corrections.map(c => `${c.from}→${c.to}`).join(', ');
+            correctionText = `<div class="example-correction">🔧 ${corrs}</div>`;
+          }
+
+          return `
+            <div class="example-card" onclick="tryPhrase('${phrase.replace(/'/g, "\'")}')">
+              <div class="example-phrase">${phrase}</div>
+              <div class="example-result">${resultText}</div>
+              ${correctionText}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function tryPhrase(phrase) {
+      input.value = phrase;
+      handleInput();
+      input.focus();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Init
+    loadHolidayData();
+  </script>
+</body>
+</html>
