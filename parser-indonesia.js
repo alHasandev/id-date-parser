@@ -18,13 +18,23 @@
  * - Typo correction: bsk→besok, mggu depn→minggu depan, dll
  */
 
+// Node.js: load Temporal polyfill (browser loads via CDN script before this file)
+if (typeof Temporal === 'undefined') {
+    try { var { Temporal } = require('temporal-polyfill'); } catch(e) {}
+}
+
 class IndonesianDateParser {
     constructor(options = {}) {
-        this.timezone = options.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jakarta';
         this.locale = options.locale || 'id-ID';
         this.weekStart = options.weekStart || 'monday';
         this.allowPast = options.allowPast ?? true;
-        this.referenceDate = options.referenceDate ? new Date(options.referenceDate) : this._getNow();
+        this.referenceDate = options.referenceDate
+            ? new Temporal.PlainDate(
+                options.referenceDate.getFullYear(),
+                options.referenceDate.getMonth() + 1,
+                options.referenceDate.getDate()
+            )
+            : Temporal.Now.plainDateISO();
 
         // Indonesian month names
         this.monthNames = [
@@ -142,8 +152,8 @@ class IndonesianDateParser {
         this._phraseCandidates = this._buildPhraseCandidates();
     }
 
-    _getNow() {
-        return new Date();
+    _getDayOfWeek(date) {
+        return date.dayOfWeek % 7;
     }
 
     /**
@@ -858,8 +868,8 @@ class IndonesianDateParser {
 
                 const endSingle = this._trySingle(endStr);
                 if (endSingle && endSingle.date) {
-                    const endMonth = endSingle.date.getMonth();
-                    const endYear = endSingle.date.getFullYear();
+                    const endMonth = endSingle.date.month - 1;
+                    const endYear = endSingle.date.year;
 
                     if (/^\d{1,2}$/.test(startStr)) {
                         startStr = `${startStr} ${this.monthNames[endMonth]} ${endYear}`;
@@ -870,7 +880,7 @@ class IndonesianDateParser {
                 const end = this._trySingle(endStr);
 
                 if (start && end && start.date && end.date) {
-                    if (start.date > end.date) {
+                    if (Temporal.PlainDate.compare(start.date, end.date) > 0) {
                         return this._generateRangeAlternatives(start, end, origStartStr, origEndStr, input);
                     }
                     return this._makeRangeResult(start, end);
@@ -890,8 +900,8 @@ class IndonesianDateParser {
         return {
             type: 'range',
             value: `${s}/${e}`,
-            start: { value: s, date: new Date(startDate), kind },
-            end: { value: e, date: new Date(endDate), kind },
+            start: { value: s, date: startDate, kind },
+            end: { value: e, date: endDate, kind },
             kind,
             original: input
         };
@@ -904,8 +914,7 @@ class IndonesianDateParser {
     _reparseForYear(text, year) {
         const prevRef = this.referenceDate;
         try {
-            this.referenceDate = new Date(prevRef);
-            this.referenceDate.setFullYear(year);
+            this.referenceDate = new Temporal.PlainDate(year, prevRef.month, prevRef.day);
             return this._trySingle(text);
         } finally {
             this.referenceDate = prevRef;
@@ -932,14 +941,14 @@ class IndonesianDateParser {
         addResult(endResult, startResult, 'tukar urutan');
 
         // Alt 2: End pushed to next year (setelah awal)
-        const startYear = startDate.getFullYear();
+        const startYear = startDate.year;
         const endNextYear = this._reparseForYear(endStr, startYear + 1);
         if (endNextYear && endNextYear.date) {
             addResult(startResult, endNextYear, 'akhir di tahun berikutnya');
         }
 
         // Alt 3: Start pushed to previous year (sebelum akhir)
-        const endYear = endDate.getFullYear();
+        const endYear = endDate.year;
         const startPrevYear = this._reparseForYear(startStr, endYear - 1);
         if (startPrevYear && startPrevYear.date) {
             addResult(startPrevYear, endResult, 'awal di tahun sebelumnya');
@@ -989,7 +998,7 @@ class IndonesianDateParser {
             if (!holiday) return null;
 
             const multiplier = (direction === 'sebelum') ? -1 : 1;
-            const resultDate = this._addToDate(holiday, { [unit + 's']: amount * multiplier });
+            const resultDate = this._add(holiday, { [unit + 's']: amount * multiplier });
 
             return this._buildSingleResult(resultDate, 'holiday-offset', input);
         }
@@ -1004,7 +1013,7 @@ class IndonesianDateParser {
             if (!holiday) return null;
 
             const multiplier = (direction === 'sebelum') ? -1 : 1;
-            const resultDate = this._addToDate(holiday, { days: 1 * multiplier });
+            const resultDate = this._add(holiday, { days: 1 * multiplier });
 
             return this._buildSingleResult(resultDate, 'holiday-offset', input);
         }
@@ -1015,7 +1024,7 @@ class IndonesianDateParser {
     _tryAnchor(input) {
         for (const [phrase, days] of Object.entries(this.anchors)) {
             if (input === phrase || input === `tanggal ${phrase}`) {
-                const date = this._addToDate(this.referenceDate, { days });
+                const date = this._add(this.referenceDate, { days });
                 return this._buildSingleResult(date, 'anchor', input);
             }
         }
@@ -1042,7 +1051,7 @@ class IndonesianDateParser {
                     amount = parseInt(match[1]);
                     unit = this.units[match[2]];
                 }
-                const date = this._addToDate(this.referenceDate, { [unit + 's']: sign * amount });
+                const date = this._add(this.referenceDate, { [unit + 's']: sign * amount });
                 return this._buildSingleResult(date, kind, input);
             }
         }
@@ -1069,31 +1078,31 @@ class IndonesianDateParser {
 
         let resultDate;
         const ref = this.referenceDate;
-        const currentDay = ref.getDay();
+        const currentDay = this._getDayOfWeek(ref);
 
         if (modifier.includes('minggu depan')) {
             const daysUntilNextWeek = (7 - currentDay) + 7;
             const daysUntilTarget = daysUntilNextWeek + ((targetDay - 0 + 7) % 7);
-            resultDate = this._addToDate(ref, { days: daysUntilTarget });
+            resultDate = this._add(ref, { days: daysUntilTarget });
         } else if (modifier.includes('minggu lalu')) {
             const daysUntilLastWeek = -currentDay - 7;
             const daysUntilTarget = daysUntilLastWeek + targetDay;
-            resultDate = this._addToDate(ref, { days: daysUntilTarget });
+            resultDate = this._add(ref, { days: daysUntilTarget });
         } else if (modifier === 'depan') {
             let daysDiff = targetDay - currentDay;
             if (daysDiff <= 0) daysDiff += 7;
-            resultDate = this._addToDate(ref, { days: daysDiff });
+            resultDate = this._add(ref, { days: daysDiff });
         } else if (modifier === 'lalu') {
             let daysDiff = targetDay - currentDay;
             if (daysDiff >= 0) daysDiff -= 7;
-            resultDate = this._addToDate(ref, { days: daysDiff });
+            resultDate = this._add(ref, { days: daysDiff });
         } else if (modifier === 'ini') {
             let daysDiff = targetDay - currentDay;
-            resultDate = this._addToDate(ref, { days: daysDiff });
+            resultDate = this._add(ref, { days: daysDiff });
         } else {
             let daysDiff = targetDay - currentDay;
             if (daysDiff < 0) daysDiff += 7;
-            resultDate = this._addToDate(ref, { days: daysDiff });
+            resultDate = this._add(ref, { days: daysDiff });
         }
 
         return this._buildSingleResult(resultDate, 'weekday', input);
@@ -1111,35 +1120,35 @@ class IndonesianDateParser {
                     const weekStart = this._getWeekStart(ref);
                     if (modifier === 'ini') {
                         startDate = weekStart;
-                        endDate = this._addToDate(weekStart, { days: 6 });
+                        endDate = this._add(weekStart, { days: 6 });
                     } else if (modifier === 'depan') {
-                        startDate = this._addToDate(weekStart, { days: 7 });
-                        endDate = this._addToDate(startDate, { days: 6 });
+                        startDate = this._add(weekStart, { days: 7 });
+                        endDate = this._add(startDate, { days: 6 });
                     } else {
-                        startDate = this._addToDate(weekStart, { days: -7 });
-                        endDate = this._addToDate(startDate, { days: 6 });
+                        startDate = this._add(weekStart, { days: -7 });
+                        endDate = this._add(startDate, { days: 6 });
                     }
                 } else if (unit === 'month') {
                     if (modifier === 'ini') {
-                        startDate = new Date(ref.getFullYear(), ref.getMonth(), 1);
-                        endDate = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+                        startDate = new Temporal.PlainDate(ref.year, ref.month, 1);
+                        endDate = new Temporal.PlainDate(ref.year, ref.month, 1).add({ months: 1 }).subtract({ days: 1 });
                     } else if (modifier === 'depan') {
-                        startDate = new Date(ref.getFullYear(), ref.getMonth() + 1, 1);
-                        endDate = new Date(ref.getFullYear(), ref.getMonth() + 2, 0);
+                        startDate = new Temporal.PlainDate(ref.year, ref.month + 1, 1);
+                        endDate = new Temporal.PlainDate(ref.year, ref.month + 1, 1).add({ months: 1 }).subtract({ days: 1 });
                     } else {
-                        startDate = new Date(ref.getFullYear(), ref.getMonth() - 1, 1);
-                        endDate = new Date(ref.getFullYear(), ref.getMonth(), 0);
+                        startDate = new Temporal.PlainDate(ref.year, ref.month - 1, 1);
+                        endDate = new Temporal.PlainDate(ref.year, ref.month - 1, 1).add({ months: 1 }).subtract({ days: 1 });
                     }
                 } else if (unit === 'year') {
                     if (modifier === 'ini') {
-                        startDate = new Date(ref.getFullYear(), 0, 1);
-                        endDate = new Date(ref.getFullYear(), 11, 31);
+                        startDate = new Temporal.PlainDate(ref.year, 1, 1);
+                        endDate = new Temporal.PlainDate(ref.year, 12, 31);
                     } else if (modifier === 'depan') {
-                        startDate = new Date(ref.getFullYear() + 1, 0, 1);
-                        endDate = new Date(ref.getFullYear() + 1, 11, 31);
+                        startDate = new Temporal.PlainDate(ref.year + 1, 1, 1);
+                        endDate = new Temporal.PlainDate(ref.year + 1, 12, 31);
                     } else {
-                        startDate = new Date(ref.getFullYear() - 1, 0, 1);
-                        endDate = new Date(ref.getFullYear() - 1, 11, 31);
+                        startDate = new Temporal.PlainDate(ref.year - 1, 1, 1);
+                        endDate = new Temporal.PlainDate(ref.year - 1, 12, 31);
                     }
                 }
 
@@ -1151,21 +1160,21 @@ class IndonesianDateParser {
         const yearMatch = input.match(this._yearPattern);
         if (yearMatch) {
             const y = parseInt(yearMatch[1]);
-            const startDate = new Date(y, 0, 1);
-            const endDate = new Date(y, 11, 31);
+            const startDate = new Temporal.PlainDate(y, 1, 1);
+            const endDate = new Temporal.PlainDate(y, 12, 31);
             return this._buildRangeResult(startDate, endDate, 'period-year', input);
         }
 
         if (input === 'akhir pekan' || input === 'akhir minggu') {
             const ref = this.referenceDate;
-            const currentDay = ref.getDay();
+            const currentDay = this._getDayOfWeek(ref);
             let saturday;
             if (currentDay === 0) {
-                saturday = this._addToDate(ref, { days: 6 });
+                saturday = this._add(ref, { days: 6 });
             } else {
-                saturday = this._addToDate(ref, { days: 6 - currentDay });
+                saturday = this._add(ref, { days: 6 - currentDay });
             }
-            const sunday = this._addToDate(saturday, { days: 1 });
+            const sunday = this._add(saturday, { days: 1 });
 
             return this._buildRangeResult(saturday, sunday, 'weekend', input);
         }
@@ -1177,24 +1186,24 @@ class IndonesianDateParser {
         const boundaries = {
             'awal bulan': () => {
                 const d = this.referenceDate;
-                return new Date(d.getFullYear(), d.getMonth(), 1);
+                return new Temporal.PlainDate(d.year, d.month, 1);
             },
             'akhir bulan': () => {
                 const d = this.referenceDate;
-                return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+                return new Temporal.PlainDate(d.year, d.month, 1).add({ months: 1 }).subtract({ days: 1 });
             },
             'awal minggu': () => this._getWeekStart(this.referenceDate),
             'akhir minggu': () => {
                 const start = this._getWeekStart(this.referenceDate);
-                return this._addToDate(start, { days: 6 });
+                return this._add(start, { days: 6 });
             },
             'awal tahun': () => {
                 const d = this.referenceDate;
-                return new Date(d.getFullYear(), 0, 1);
+                return new Temporal.PlainDate(d.year, 1, 1);
             },
             'akhir tahun': () => {
                 const d = this.referenceDate;
-                return new Date(d.getFullYear(), 11, 31);
+                return new Temporal.PlainDate(d.year, 12, 31);
             }
         };
 
@@ -1213,30 +1222,30 @@ class IndonesianDateParser {
             let date;
 
             if (unitName === 'bulan') {
-                let targetMonth = ref.getMonth();
-                let targetYear = ref.getFullYear();
+                let targetMonth = ref.month;
+                let targetYear = ref.year;
                 if (modifier === 'depan') { targetMonth++; }
                 else if (modifier === 'lalu') { targetMonth--; }
-                if (targetMonth < 0) { targetMonth = 11; targetYear--; }
-                if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+                if (targetMonth < 1) { targetMonth = 12; targetYear--; }
+                if (targetMonth > 12) { targetMonth = 1; targetYear++; }
                 date = edge === 'awal'
-                    ? new Date(targetYear, targetMonth, 1)
-                    : new Date(targetYear, targetMonth + 1, 0);
+                    ? new Temporal.PlainDate(targetYear, targetMonth, 1)
+                    : new Temporal.PlainDate(targetYear, targetMonth, 1).add({ months: 1 }).subtract({ days: 1 });
             } else if (unitName === 'tahun') {
-                let targetYear = ref.getFullYear();
+                let targetYear = ref.year;
                 if (modifier === 'depan') targetYear++;
                 else if (modifier === 'lalu') targetYear--;
                 date = edge === 'awal'
-                    ? new Date(targetYear, 0, 1)
-                    : new Date(targetYear, 11, 31);
+                    ? new Temporal.PlainDate(targetYear, 1, 1)
+                    : new Temporal.PlainDate(targetYear, 12, 31);
             } else {
                 // minggu / pekan
                 const weekStart = this._getWeekStart(ref);
                 let baseStart;
                 if (modifier === 'ini') baseStart = weekStart;
-                else if (modifier === 'depan') baseStart = this._addToDate(weekStart, { days: 7 });
-                else baseStart = this._addToDate(weekStart, { days: -7 });
-                date = edge === 'awal' ? baseStart : this._addToDate(baseStart, { days: 6 });
+                else if (modifier === 'depan') baseStart = this._add(weekStart, { days: 7 });
+                else baseStart = this._add(weekStart, { days: -7 });
+                date = edge === 'awal' ? baseStart : this._add(baseStart, { days: 6 });
             }
 
             return this._buildSingleResult(date, 'boundary', input);
@@ -1277,17 +1286,17 @@ class IndonesianDateParser {
         }
 
         if (year === undefined) {
-            year = this.referenceDate.getFullYear();
+            year = this.referenceDate.year;
         }
 
         if (holidayData.fixed) {
-            return new Date(year, holidayData.fixed.month - 1, holidayData.fixed.day);
+            return new Temporal.PlainDate(year, holidayData.fixed.month, holidayData.fixed.day);
         }
 
         // Use trusted lookup data if available for this year
         if (holidayData.lookup && holidayData.lookup[year]) {
             const entry = holidayData.lookup[year];
-            return new Date(year, entry.month - 1, entry.day);
+            return new Temporal.PlainDate(year, entry.month, entry.day);
         }
 
         // Compute dynamically for Islamic holidays using Hijri calendar
@@ -1302,10 +1311,10 @@ class IndonesianDateParser {
                 .sort((a, b) => Math.abs(a - year) - Math.abs(b - year))[0];
             const nearest = holidayData.lookup[nearestYear];
             const yearDiff = year - nearestYear;
-            const approxDate = new Date(year, nearest.month - 1, nearest.day);
-            approxDate.setDate(approxDate.getDate() - (yearDiff * 11));
-            if (approxDate.getFullYear() !== year) {
-                approxDate.setFullYear(year);
+            let approxDate = new Temporal.PlainDate(year, nearest.month, nearest.day);
+            approxDate = approxDate.add({ days: -(yearDiff * 11) });
+            if (approxDate.year !== year) {
+                approxDate = new Temporal.PlainDate(year, approxDate.month, approxDate.day);
             }
             return approxDate;
         }
@@ -1322,7 +1331,7 @@ class IndonesianDateParser {
 
         for (let h = approxHijri - 1; h <= approxHijri + 1; h++) {
             const date = this._hijriToGregorian(h, islamicDef.month, islamicDef.day);
-            if (date.getFullYear() === gregorianYear) {
+            if (date.year === gregorianYear) {
                 return date;
             }
         }
@@ -1359,7 +1368,7 @@ class IndonesianDateParser {
         const kk = Math.floor(j / 11);
         const m = j + 2 - 12 * kk;
         const y = 100 * (n - 49) + i + kk;
-        return new Date(y, m - 1, d);
+        return new Temporal.PlainDate(y, m, d);
     }
 
     /**
@@ -1368,7 +1377,7 @@ class IndonesianDateParser {
      * @param {number[]} [years] - Array of Gregorian years to cache (default: current ± 5)
      */
     async init(years) {
-        const currentYear = this.referenceDate.getFullYear();
+        const currentYear = this.referenceDate.year;
         if (!years || years.length === 0) {
             years = [];
             for (let y = currentYear - 5; y <= currentYear + 10; y++) {
@@ -1413,7 +1422,7 @@ class IndonesianDateParser {
                 const g = json.data.gregorian;
                 if (parseInt(g.year) !== gregorianYear) continue;
 
-                const date = new Date(parseInt(g.year), parseInt(g.month.number) - 1, parseInt(g.day));
+                const date = new Temporal.PlainDate(parseInt(g.year), parseInt(g.month.number), parseInt(g.day));
                 // Store in lookup for sync parse
                 if (!this.holidayDates[name].lookup) {
                     this.holidayDates[name].lookup = {};
@@ -1436,8 +1445,8 @@ class IndonesianDateParser {
                 this.holidayDates[name].lookup = {};
             }
             this.holidayDates[name].lookup[gregorianYear] = {
-                month: fallback.getMonth() + 1,
-                day: fallback.getDate()
+                month: fallback.month,
+                day: fallback.day
             };
             this._islamicCache[cacheKey] = fallback;
         }
@@ -1452,9 +1461,9 @@ class IndonesianDateParser {
                 parser: (m) => {
                     const day = parseInt(m[1]);
                     const month = this._parseMonth(m[2]);
-                    const year = m[3] ? parseInt(m[3]) : this.referenceDate.getFullYear();
+                    const year = m[3] ? parseInt(m[3]) : this.referenceDate.year;
                     if (month === -1 || day < 1 || day > 31) return null;
-                    return new Date(year, month, day);
+                    return new Temporal.PlainDate(year, month + 1, day);
                 }
             },
             {
@@ -1463,7 +1472,7 @@ class IndonesianDateParser {
                     const month = this._parseMonth(m[1]);
                     const year = parseInt(m[2]);
                     if (month === -1) return null;
-                    return new Date(year, month, 1);
+                    return new Temporal.PlainDate(year, month + 1, 1);
                 }
             },
             {
@@ -1471,49 +1480,49 @@ class IndonesianDateParser {
                 parser: (m) => {
                     const month = this._parseMonth(m[1]);
                     const day = parseInt(m[2]);
-                    const year = m[3] ? parseInt(m[3]) : this.referenceDate.getFullYear();
+                    const year = m[3] ? parseInt(m[3]) : this.referenceDate.year;
                     if (month === -1 || day < 1 || day > 31) return null;
-                    return new Date(year, month, day);
+                    return new Temporal.PlainDate(year, month + 1, day);
                 }
             },
             {
                 regex: /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/,
                 parser: (m) => {
                     const day = parseInt(m[1]);
-                    const month = parseInt(m[2]) - 1;
+                    const month = parseInt(m[2]);
                     let year = parseInt(m[3]);
                     if (year < 100) year += year < 50 ? 2000 : 1900;
-                    if (day < 1 || day > 31 || month < 0 || month > 11) return null;
-                    return new Date(year, month, day);
+                    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+                    return new Temporal.PlainDate(year, month, day);
                 }
             },
             {
                 regex: /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/,
                 parser: (m) => {
                     const year = parseInt(m[1]);
-                    const month = parseInt(m[2]) - 1;
+                    const month = parseInt(m[2]);
                     const day = parseInt(m[3]);
-                    if (day < 1 || day > 31 || month < 0 || month > 11) return null;
-                    return new Date(year, month, day);
+                    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+                    return new Temporal.PlainDate(year, month, day);
                 }
             },
             {
                 regex: /^([a-z]+)$/,
                 parser: (m) => {
                     const month = this._parseMonth(m[1]);
-                    const year = this.referenceDate.getFullYear();
+                    const year = this.referenceDate.year;
                     if (month === -1) return null;
-                    return new Date(year, month, 1);
+                    return new Temporal.PlainDate(year, month + 1, 1);
                 }
             },
             {
                 regex: /^(\d{1,2})[\/\-.](\d{1,2})$/,
                 parser: (m) => {
                     const day = parseInt(m[1]);
-                    const month = parseInt(m[2]) - 1;
-                    const year = this.referenceDate.getFullYear();
-                    if (day < 1 || day > 31 || month < 0 || month > 11) return null;
-                    return new Date(year, month, day);
+                    const month = parseInt(m[2]);
+                    const year = this.referenceDate.year;
+                    if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+                    return new Temporal.PlainDate(year, month, day);
                 }
             }
         ];
@@ -1521,9 +1530,13 @@ class IndonesianDateParser {
         for (const { regex, parser } of patterns) {
             const match = cleanInput.match(regex);
             if (match) {
-                const date = parser(match);
-                if (date && !isNaN(date.getTime())) {
-                    return this._buildSingleResult(date, 'absolute', input);
+                try {
+                    const date = parser(match);
+                    if (date) {
+                        return this._buildSingleResult(date, 'absolute', input);
+                    }
+                } catch (e) {
+                    // invalid date, try next pattern
                 }
             }
         }
@@ -1558,46 +1571,30 @@ class IndonesianDateParser {
     }
 
     _getWeekStart(date) {
-        const d = new Date(date);
-        const day = d.getDay();
+        const d = date;
+        const day = this._getDayOfWeek(d);
         const diff = this.weekStart === 'monday'
             ? (day === 0 ? -6 : 1) - day
             : -day;
-        d.setDate(d.getDate() + diff);
-        d.setHours(0, 0, 0, 0);
-        return d;
+        return d.add({ days: diff });
     }
 
-    _addToDate(date, duration) {
-        const result = new Date(date);
-
-        if (duration.years) result.setFullYear(result.getFullYear() + duration.years);
-        if (duration.months) result.setMonth(result.getMonth() + duration.months);
-        if (duration.days) result.setDate(result.getDate() + duration.days);
-        if (duration.weeks) result.setDate(result.getDate() + duration.weeks * 7);
-        if (duration.hours) result.setHours(result.getHours() + duration.hours);
-        if (duration.minutes) result.setMinutes(result.getMinutes() + duration.minutes);
-
-        return result;
+    _add(date, duration) {
+        return date.add(duration);
     }
 
     _formatDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return date.toString();
     }
 
     formatDisplay(date) {
-        const options = {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            timeZone: this.timezone
-        };
-        return date.toLocaleDateString(this.locale, options);
+        const d = new Date(Date.UTC(date.year, date.month - 1, date.day));
+        return d.toLocaleDateString(this.locale, {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            timeZone: 'UTC'
+        });
     }
+
 }
 
 if (typeof module !== 'undefined' && module.exports) {
