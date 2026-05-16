@@ -23,7 +23,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alhasan99dev/id-date-parser"
+    "url": "git+https://github.com/alhasandev/id-date-parser.git"
   },
   "dependencies": {
     "temporal-polyfill": "^0.3.2"
