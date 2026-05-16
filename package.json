@@ -1,5 +1,31 @@
 {
-  "devDependencies": {
+  "name": "id-date-parser",
+  "version": "1.0.0",
+  "description": "Natural language date parser for Indonesian (Bahasa Indonesia) with typo correction, holiday support, and range parsing",
+  "main": "index.min.js",
+  "files": [
+    "index.js",
+    "index.min.js"
+  ],
+  "keywords": [
+    "indonesian",
+    "bahasa",
+    "date",
+    "parser",
+    "natural-language",
+    "nlp",
+    "tanggal",
+    "holiday",
+    "idul-fitri",
+    "hijri",
+    "temporal"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alhasan99dev/id-date-parser"
+  },
+  "dependencies": {
     "temporal-polyfill": "^0.3.2"
   }
 }

@@ -1,5 +1,4 @@
-import 'temporal-polyfill';
-import IndonesianDateParser from './parser-indonesia.js';
+import IndonesianDateParser from './index.js';
 
 const parser = new IndonesianDateParser({
   referenceDate: new Date('2026-05-16'),
