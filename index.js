@@ -26,6 +26,7 @@ if (typeof Temporal === 'undefined') {
 class IndonesianDateParser {
     constructor(options = {}) {
         this.locale = options.locale || 'id-ID';
+        this.timezone = options.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         this.weekStart = options.weekStart || 'monday';
         this.allowPast = options.allowPast ?? true;
         this.referenceDate = options.referenceDate
@@ -86,9 +87,9 @@ class IndonesianDateParser {
         this._buildFuzzyDictionary();
         this._buildPhraseDictionary();
 
-        // Islamic holiday API cache
-        this._islamicCache = {};
-        this._apiBaseUrl = 'https://api.aladhan.com/v1/hToG';
+        // Islamic holiday API (lazy-fetched via ensureYear)
+        this._holidayApiUrl = options.holidayApiUrl || 'https://api.aladhan.com/v1/islamicHolidaysByHijriYear';
+        this._loadHolidayCache();
 
         // Pre-compiled regex patterns & pre-bound rule cascade
         this._rangePatterns = [
@@ -360,6 +361,7 @@ class IndonesianDateParser {
             // Holidays
             'idfitri': 'idul fitri',
             'fitri': 'idul fitri',
+            'ftri': 'fitri',
             'idulfitri': 'idul fitri',
             'lebaran': 'lebaran',
             'lbrn': 'lebaran',
@@ -1387,19 +1389,16 @@ class IndonesianDateParser {
     }
 
     /**
-     * Pre-cache Islamic holiday dates from Aladhan API for a range of years.
-     * Uses the bulk hijri-year endpoint: 1 call per year instead of 4.
-     * @param {number[]} [years] - Array of Gregorian years to cache (default: current ± 5)
+     * Fetch Islamic holidays for a single Gregorian year on demand.
+     * Caches to localStorage so subsequent visits skip the API.
      */
-    async init(years) {
+    async ensureYear(year) {
+        // Already in lookup? Skip fetch
+        const sample = this.holidayDates['idul fitri'];
+        if (sample.lookup && sample.lookup[year]) return;
+
         if (typeof fetch === 'undefined') return;
-        const currentYear = this.referenceDate.year;
-        if (!years || years.length === 0) {
-            years = [];
-            for (let y = currentYear - 5; y <= currentYear + 10; y++) {
-                years.push(y);
-            }
-        }
+        const hijri = Math.round((year - 622) * 33 / 32);
 
         const holidayMap = {
             'Eid-ul-Fitr': ['idul fitri', 'hari raya idul fitri', 'fitri', 'lebaran'],
@@ -1408,45 +1407,70 @@ class IndonesianDateParser {
             'Miraj': ['isra miraj', 'isra mi raj', 'isra']
         };
 
-        const fetchedHijri = new Set();
-        for (const year of years) {
-            const hijri = Math.round((year - 622) * 33 / 32);
-            if (fetchedHijri.has(hijri)) continue;
-            fetchedHijri.add(hijri);
+        try {
+            const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
+            const res = await fetch(`${this._holidayApiUrl}/${hijri}`, ctrl ? { signal: ctrl.signal } : {});
+            if (timer) clearTimeout(timer);
+            if (!res.ok) return;
+            const json = await res.json();
+            if (json.code !== 200 || !json.data) return;
 
-            try {
-                const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-                const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
-                const res = await fetch(`https://api.aladhan.com/v1/islamicHolidaysByHijriYear/${hijri}`, ctrl ? { signal: ctrl.signal } : {});
-                if (timer) clearTimeout(timer);
-                if (!res.ok) continue;
-
-                const json = await res.json();
-                if (json.code !== 200 || !json.data) continue;
-
-                for (const entry of json.data) {
-                    if (!entry.hijri.holidays.length || !entry.gregorian) continue;
-                    const g = entry.gregorian;
-                    const gYear = parseInt(g.year);
-                    for (const hName of entry.hijri.holidays) {
-                        for (const [key, targets] of Object.entries(holidayMap)) {
-                            if (!hName.includes(key)) continue;
-                            for (const target of targets) {
-                                if (!this.holidayDates[target].lookup) {
-                                    this.holidayDates[target].lookup = {};
-                                }
-                                this.holidayDates[target].lookup[gYear] = {
-                                    month: parseInt(g.month.number),
-                                    day: parseInt(g.day)
-                                };
-                            }
+            for (const entry of json.data) {
+                if (!entry.hijri.holidays.length || !entry.gregorian) continue;
+                const g = entry.gregorian;
+                const gYear = parseInt(g.year);
+                for (const hName of entry.hijri.holidays) {
+                    for (const [key, targets] of Object.entries(holidayMap)) {
+                        if (!hName.includes(key)) continue;
+                        for (const target of targets) {
+                            if (!this.holidayDates[target]) continue;
+                            if (!this.holidayDates[target].lookup) this.holidayDates[target].lookup = {};
+                            this.holidayDates[target].lookup[gYear] = {
+                                month: parseInt(g.month.number),
+                                day: parseInt(g.day)
+                            };
                         }
                     }
                 }
-            } catch (e) {
-                continue;
             }
-        }
+            this._saveHolidayCache();
+        } catch (e) { }
+    }
+
+    _loadHolidayCache() {
+        try {
+            const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('id-date-parser-holidays') : null;
+            if (!raw) return;
+            const cache = JSON.parse(raw);
+            for (const [year, holidays] of Object.entries(cache)) {
+                for (const [name, entry] of Object.entries(holidays)) {
+                    if (!this.holidayDates[name]) continue;
+                    if (!this.holidayDates[name].lookup) this.holidayDates[name].lookup = {};
+                    this.holidayDates[name].lookup[Number(year)] = entry;
+                }
+            }
+        } catch (e) { }
+    }
+
+    _saveHolidayCache() {
+        try {
+            if (typeof localStorage === 'undefined') return;
+            const cache = {};
+            const baseNames = ['idul fitri', 'idul adha', 'maulid nabi', 'isra miraj', 'tahun baru imlek', 'waisak'];
+            for (const name of baseNames) {
+                const lookup = this.holidayDates[name]?.lookup;
+                if (!lookup) continue;
+                for (const [year, entry] of Object.entries(lookup)) {
+                    if (Number(year) <= 2027) continue; // skip hardcoded data
+                    if (!cache[year]) cache[year] = {};
+                    cache[year][name] = entry;
+                }
+            }
+            if (Object.keys(cache).length > 0) {
+                localStorage.setItem('id-date-parser-holidays', JSON.stringify(cache));
+            }
+        } catch (e) { }
     }
 
     _tryDateFormat(input) {
@@ -1550,10 +1574,8 @@ class IndonesianDateParser {
     }
 
     formatDisplay(date) {
-        const d = new Date(Date.UTC(date.year, date.month - 1, date.day));
-        return d.toLocaleDateString(this.locale, {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-            timeZone: 'UTC'
+        return date.toZonedDateTime(this.timezone).toLocaleString(this.locale, {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
         });
     }
 

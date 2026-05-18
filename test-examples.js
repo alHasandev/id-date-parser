@@ -8,7 +8,7 @@ const parser = new IndonesianDateParser({
 const examples = {
   abbr: ['bsk', 'kmrn', 'hr ini', 'dlm 3 hr', 'tgl 14 Maret', 'bln depan', 'thn lalu', 'mggu depan', 'sblm Natal', 'stlh Idul Fitri'],
   typo: ['besk', 'kemaren', 'senin dpan', 'minggu dpann', 'awal bln', 'akhir mnggu', 'dalm 5 hari', '3 hari yg lalu', 'hari kamiss', 'bulan dpan'],
-  combo: ['bsk smp lusa', '3 hr sblm Natal', 'mgg depn - mgg llu', 'dlm 2 bln lg', 'tgl 17 agst', 'kmrn lusa dr skrg', 'awl thn dpann', 'akhr mnggu ini', 'april 2029 sampai juni 2026', 'april 2029 sampai juni'],
+  combo: ['bsk smp lusa', '3 hr sblm Natal', 'mgg depn - mgg llu', 'dlm 2 bln lg', 'tgl 17 agst', 'kmrn lusa dr skrg', 'awl thn dpann', 'akhr mnggu ini', 'april 2029 sampai juni 2026', 'april 2029 sampai juni', 'idul ftri 2034'],
   arithmetic: ['3 hari sebelum Natal', '2 minggu setelah Idul Fitri', '1 hari sebelum Tahun Baru', '7 hari sesudah Waisak', 'sebelum Natal', 'setelah Idul Fitri', 'sesudah Waisak']
 };
 

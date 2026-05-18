@@ -396,32 +396,17 @@
       weekStart: weekStartSelect.value
     });
 
-    let initDone = false;
-
-    async function loadHolidayData() {
-      resultBox.className = 'result-box';
-      resultBox.innerHTML = '<div style="display:flex;align-items:center;gap:0.75rem;color:#6366f1"><span style="display:inline-block;width:20px;height:20px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:spin 0.6s linear infinite"></span> Memuat data hari libur dari API...</div>';
-      try {
-        await parser.init();
-      } catch (e) {
-        console.warn('Failed to fetch Islamic holidays from API, using local computation:', e.message);
-      }
-      initDone = true;
-      resultBox.className = 'result-box empty';
-      resultBox.innerHTML = 'Hasil akan muncul di sini...';
-      renderExamples();
-    }
+    const ISLAMIC_HOLIDAY_KEYWORDS = /idul fitri|idul adha|lebaran|maulid nabi|isra mira|isra mi raj/i;
 
     function updateParser() {
       parser = new IndonesianDateParser({
         referenceDate: new Date(refDateInput.value),
         weekStart: weekStartSelect.value
       });
-      initDone = false;
       if (input.value.trim()) {
         handleInput();
       }
-      loadHolidayData();
+      renderExamples();
     }
 
     refDateInput.addEventListener('change', updateParser);
@@ -437,6 +422,14 @@
 
       const result = parser.parse(value);
       renderResult(result);
+
+      // Lazy-fetch Islamic holidays in background if input looks like a holiday
+      if (ISLAMIC_HOLIDAY_KEYWORDS.test(value)) {
+        const year = (result.date || result.start?.date || result.results?.[0]?.date)?.year
+                  || (result.results?.[0]?.start?.date?.year)
+                  || parser.referenceDate.year;
+        parser.ensureYear(year);
+      }
     }
 
     function renderResult(result) {
@@ -725,8 +718,7 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // Init
-    loadHolidayData();
+    renderExamples();
   </script>
 </body>
 </html>
